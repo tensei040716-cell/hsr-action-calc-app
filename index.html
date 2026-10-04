@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>スターレイル行動回数計算</title>
+<meta name="description" content="崩壊：スターレイルの速度から各コンテンツの行動回数と次の目標速度を計算する非公式ツール">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="行動回数計算">
+<meta name="theme-color" content="#eceef6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11142a" media="(prefers-color-scheme: dark)">
+<style>html{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 左に入力パネル(固定)、右に行動タイムラインと結果表。スマホでは1カラムに積む。 */
+:root{
+  --bg:#eceef6; --surface:#f9faff; --sunk:#e1e5f2; --ink:#1b2140; --muted:#59618a; --line:#cfd5e8;
+  --gold:#96640f; --gold-soft:#f1e3c2; --rail:#3b4bc4; --rail-soft:#dfe3fb; --on-rail:#ffffff;
+  --display:"Chakra Petch","Zen Kaku Gothic New",system-ui,sans-serif;
+  --body:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11142a; --surface:#1a1f3e; --sunk:#151935; --ink:#e9ebf8; --muted:#9ca4c8; --line:#2f3663;
+    --gold:#e4b862; --gold-soft:#3d3420; --rail:#94a0ff; --rail-soft:#262d5c; --on-rail:#11142a;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11142a; --surface:#1a1f3e; --sunk:#151935; --ink:#e9ebf8; --muted:#9ca4c8; --line:#2f3663;
+  --gold:#e4b862; --gold-soft:#3d3420; --rail:#94a0ff; --rail-soft:#262d5c; --on-rail:#11142a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.7}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:28px 48px;display:flex;flex-direction:column;gap:24px}
+header{display:flex;flex-direction:column;gap:6px}
+.eyebrow{font-family:var(--display);font-size:12px;letter-spacing:.18em;color:var(--gold);font-weight:600}
+h1{font-size:26px;line-height:1.3;margin:0;font-weight:700;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:40em}
+.grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:20px;display:flex;flex-direction:column;gap:18px}
+@media (min-width:821px){.panel{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}}
+h2{font-size:13px;margin:0;color:var(--muted);font-weight:700;letter-spacing:.08em}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label,.field .lab{font-weight:700;font-size:14px}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.55}
+input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 10px;width:100%;min-width:0}
+#preset{font-family:var(--body)}
+[hidden]{display:none!important}
+.xfer{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+textarea{font:inherit;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 10px;width:100%;min-width:0;resize:vertical;word-break:break-all}
+textarea:focus-visible{outline:2px solid var(--rail);outline-offset:2px}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btn{font:inherit;font-size:13.5px;font-weight:700;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:4px;padding:6px 14px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--rail);border-color:var(--rail);color:var(--on-rail)}
+.btn:disabled{opacity:.45;cursor:default}
+input[type=number],select{font:inherit;font-family:var(--display);font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 10px;width:100%;min-width:0}
+#spd{font-size:28px;padding:6px 12px;color:var(--rail)}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--rail);outline-offset:2px}
+.row{display:flex;gap:10px}
+.row>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.row .sub{font-size:12px;color:var(--muted)}
+.check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.check input{width:18px;height:18px;margin-top:4px;accent-color:var(--rail);flex:none}
+hr{border:0;border-top:1px dashed var(--line);margin:0;width:100%}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fact{background:var(--sunk);border-radius:4px;padding:10px 12px}
+.fact b{display:block;font-family:var(--display);font-size:20px;font-variant-numeric:tabular-nums;line-height:1.2}
+.fact span{font-size:12px;color:var(--muted)}
+.note{font-size:12.5px;color:var(--gold);background:var(--gold-soft);border-radius:4px;padding:8px 10px;line-height:1.5}
+.out{display:flex;flex-direction:column;gap:18px;min-width:0}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-weight:700;font-size:14px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:999px;padding:6px 16px;cursor:pointer}
+.tabs button:hover{color:var(--ink);border-color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--rail);border-color:var(--rail);color:var(--on-rail)}
+.modehint{margin:0;color:var(--muted);font-size:13.5px}
+.goal{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.goal label{font-weight:700;font-size:14px}
+.goal input{width:5.5em}
+/* タイムライン */
+.tl{display:flex;flex-direction:column;gap:6px}
+.track{position:relative;height:54px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.seg{position:absolute;top:0;bottom:0;border-left:1px solid var(--line);font-family:var(--display);font-size:11px;color:var(--muted);padding:2px 4px;font-variant-numeric:tabular-nums}
+.seg:nth-child(odd){background:var(--rail-soft)}
+.railline{position:absolute;left:0;right:0;top:36px;height:2px;background:var(--line)}
+.tick{position:absolute;top:24px;width:3px;height:24px;margin-left:-1.5px;background:var(--rail);border-radius:2px}
+.tick.zero{background:var(--gold)}
+.tlcap{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);gap:12px;flex-wrap:wrap}
+/* 表 */
+.tablebox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+@media (max-width:480px){th,td{padding:8px 8px!important}th{font-size:11px!important;letter-spacing:0!important}}
+th,td{padding:9px 14px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.04em;background:var(--sunk)}
+th:first-child,td:first-child{text-align:left}
+tr:last-child td{border-bottom:0}
+td{font-family:var(--display);font-weight:500}
+td.big{font-size:19px;font-weight:700;color:var(--rail)}
+td .plus{font-size:12px;color:var(--muted);margin-left:6px}
+td .need{color:var(--gold);font-weight:700}
+td .gain{display:inline-block;min-width:2.2em;text-align:center;border-radius:999px;background:var(--rail-soft);color:var(--ink);font-size:13px;padding:0 6px}
+td .gain.none{background:transparent;color:var(--muted)}
+tr.neg td{color:var(--muted)}
+details{font-size:13.5px;color:var(--muted)}
+details summary{cursor:pointer;font-weight:700;color:var(--ink)}
+details ul{margin:8px 0 0;padding-left:1.3em;display:flex;flex-direction:column;gap:4px}
+code{font-family:var(--display);color:var(--ink)}
+footer{font-size:12px;color:var(--muted)}
+</style>
+
+<script>window.STANDALONE=true;if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">ACTION VALUE CALCULATOR</div>
+    <h1>崩壊：スターレイル 行動回数計算</h1>
+    <p>戦闘中の速度から、各コンテンツで何回行動できるかと、あと1回動くために必要な速度を調べられます。</p>
+  </header>
+
+  <div class="grid">
+    <form class="panel" id="form" autocomplete="off">
+      <h2>保存したキャラ</h2>
+      <div class="field">
+        <select id="preset" aria-label="保存したキャラを選ぶ"></select>
+        <div class="row">
+          <div><input type="text" id="pname" maxlength="30" placeholder="キャラ名" aria-label="保存する名前"></div>
+        </div>
+        <div class="btns">
+          <button type="button" id="psave" class="btn primary">この設定を保存</button>
+          <button type="button" id="pdel" class="btn">削除</button>
+        </div>
+        <div class="hint" id="pmsg" role="status">速度や装備の設定に名前を付けて保存できます。このブラウザ内に保存されます。</div>
+      </div>
+      <details id="xfer">
+        <summary>他の端末と共有する</summary>
+        <div class="xfer">
+          <div class="hint">保存したキャラをまとめて別のスマホやPCに移せます。送る側で作った共有コードを、受け取る側で貼り付けて読み込みます。</div>
+          <div class="btns"><button type="button" id="xmake" class="btn primary">共有コードを作ってコピー</button></div>
+          <textarea id="xout" rows="2" readonly aria-label="共有コード" hidden></textarea>
+          <textarea id="xin" rows="2" placeholder="受け取った共有コードを貼り付け" aria-label="受け取った共有コード"></textarea>
+          <div class="btns"><button type="button" id="xload" class="btn">読み込む</button></div>
+          <div class="hint" id="xmsg" role="status"></div>
+        </div>
+      </details>
+      <hr>
+      <h2>キャラクターの設定</h2>
+      <div class="field">
+        <label for="spd">速度</label>
+        <input type="number" id="spd" min="1" max="999" step="0.1" value="134" inputmode="decimal">
+        <div class="hint">戦闘中のバフ・デバフをすべて含めた最終的な速度を入力します。</div>
+      </div>
+      <div class="facts">
+        <div class="fact"><b id="fAv">–</b><span>1行動の行動値</span></div>
+        <div class="fact"><b id="fAdv">–</b><span>行動順アップ合計</span></div>
+      </div>
+      <hr>
+      <div class="field">
+        <label for="open">開幕の行動順アップ (%)</label>
+        <input type="number" id="open" min="0" max="100" step="1" value="0" inputmode="decimal">
+        <div class="hint">戦闘開始時に行動順が早まる効果の合計。ウェンワークは下のチェックで別に加算します。</div>
+      </div>
+      <label class="check" for="von">
+        <input type="checkbox" id="von">
+        <span><span class="lab" style="font-weight:700">生命のウェンワーク（2セット）</span><br><span class="hint">速度120以上のとき、開幕の行動順が40%早まります。</span></span>
+      </label>
+      <div class="note" id="vonNote" hidden>速度が120未満のため、ウェンワークの効果は発動しません。</div>
+      <hr>
+      <div class="field">
+        <span class="lab">ダンス！ダンス！ダンス！</span>
+        <div class="row">
+          <div><input type="number" id="dddN" min="0" max="30" step="1" value="0" inputmode="numeric" aria-label="ダンス！ダンス！ダンス！の必殺技回数"><span class="sub">必殺技の回数</span></div>
+          <div><select id="dddS" aria-label="重畳ランク">
+            <option value="16">重畳1（16%）</option><option value="18">重畳2（18%）</option><option value="20">重畳3（20%）</option><option value="22">重畳4（22%）</option><option value="24">重畳5（24%）</option>
+          </select><span class="sub">重畳ランク</span></div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="eagN">昼夜の狭間を翔ける鷹（4セット）</label>
+        <input type="number" id="eagN" min="0" max="30" step="1" value="0" inputmode="numeric">
+        <div class="hint">装備者の必殺技の回数。1回ごとに行動順が25%早まります。</div>
+      </div>
+    </form>
+
+    <section class="out">
+      <div class="tabs" role="tablist" aria-label="コンテンツ">
+        <button type="button" role="tab" id="tab-moc" data-mode="moc">混沌・虚構・忘却</button>
+        <button type="button" role="tab" id="tab-aa" data-mode="aa">異相の仲裁</button>
+        <button type="button" role="tab" id="tab-as" data-mode="as">末日の幻影</button>
+      </div>
+      <p class="modehint" id="modeHint"></p>
+      <div class="goal" id="goalBox"><label for="goal">目標ラウンド</label><input type="number" id="goal" min="0" step="1" inputmode="numeric"><span class="hint" id="goalHint"></span></div>
+      <div class="tl">
+        <div class="track" id="track"></div>
+        <div class="tlcap"><span id="tlLeft"></span><span id="tlRight"></span></div>
+      </div>
+      <div class="tablebox"><table id="table"></table></div>
+      <details>
+        <summary>計算のしくみと前提</summary>
+        <ul>
+          <li>1回の行動に必要な行動値は <code>10000 ÷ 速度</code> です。</li>
+          <li>忘却の庭・虚構叙事は最初のラウンド（0）が行動値150、異相の仲裁は300で、以降はどちらも1ラウンドあたり100です。</li>
+          <li>末日の幻影は行動値2000からのカウントダウンとして、各行動を終えた時点の残りを表示します。</li>
+          <li>行動順アップ1%は、1行動ぶんの行動値の1%を短縮します。開幕ぶんは合計100%が上限です。</li>
+          <li>必殺技による行動順アップは、入力した回数ぶんがすべて無駄なく乗った場合の値です。序盤のラウンドでは実際より多めに出ることがあります。</li>
+          <li>戦闘中に速度が変わる場合や、他キャラからの行動順アップ（ブローニャのスキルなど）は含みません。</li>
+          <li>次目標速度は小数第1位に切り上げています。</li>
+        </ul>
+      </details>
+    </section>
+  </div>
+  <footer>非公式のファンメイドツールです。ゲーム内の数値は小数点以下が表示されないため、ぎりぎりの速度では実際の結果と1回ずれる場合があります。</footer>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var ids=['spd','open','von','dddN','dddS','eagN'];
+  var MODES={
+    moc:{rounds:10,first:150,hint:'「忘却の庭・混沌の記憶」「虚構叙事」向け。ラウンド0〜10の終了時点での累計行動回数です。'},
+    aa:{rounds:6,first:300,hint:'「異相の仲裁」向け。最初のラウンドは行動値300、以降は100です。ラウンド0〜6の終了時点での累計行動回数を表示します。'},
+    as:{total:2000,hint:'「末日の幻影」向け。各行動を終えた時点の残り行動値です。残りが多いほどスコアが伸びます。'}
+  };
+  var mode='moc';
+  var goals={moc:'',aa:''};
+  function goalOf(mo){var m=MODES[mo],v=parseInt(goals[mo],10);return isFinite(v)?Math.min(m.rounds,Math.max(0,v)):m.rounds}
+  var EPS=1e-9;
+
+  function num(id,def){var v=parseFloat($(id).value);return isFinite(v)?v:def}
+  function read(){
+    return {
+      spd:Math.max(0,num('spd',0)),
+      open:Math.min(100,Math.max(0,num('open',0)))/100,
+      von:$('von').checked,
+      ult:Math.max(0,Math.floor(num('dddN',0)))*num('dddS',16)/100+Math.max(0,Math.floor(num('eagN',0)))*0.25
+    };
+  }
+  // 行動順アップ合計(行動回数ぶん換算)。vonOn: ウェンワークが発動している前提か
+  function adv(o,vonOn){return Math.min(1,o.open+(vonOn?0.4:0))+o.ult}
+  function vonActive(o,spd){return o.von&&spd>=120}
+  function count(o,spd,T){
+    if(spd<=0)return 0;
+    return Math.max(0,Math.floor(T*spd/10000+adv(o,vonActive(o,spd))+EPS));
+  }
+  function timeOf(o,n){ // n回目の行動が起きる行動値
+    return Math.max(0,n-adv(o,vonActive(o,o.spd)))*10000/o.spd;
+  }
+  function nextSpeed(o,T,n){
+    var sA=(n+1-adv(o,false))*10000/T, s;
+    if(!o.von) s=sA;
+    else if(sA<120) s=sA;
+    else s=Math.max(120,(n+1-adv(o,true))*10000/T);
+    return Math.ceil(s*10-1e-6)/10;
+  }
+  function fmt(x,d){return x.toFixed(d)}
+
+  function render(){
+    var o=read(), m=MODES[mode], on=vonActive(o,o.spd);
+    $('vonNote').hidden=!(o.von&&!on);
+    $('fAv').textContent=o.spd>0?fmt(10000/o.spd,1):'–';
+    $('fAdv').textContent=Math.round(adv(o,on)*100)+'%';
+    $('modeHint').textContent=m.hint;
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'),function(b){
+      b.setAttribute('aria-selected',b.dataset.mode===mode?'true':'false');
+    });
+    var table=$('table'), track=$('track'), html='', th='';
+    var gb=$('goalBox'), R=0;
+    gb.hidden=(mode==='as');
+    if(mode!=='as'){R=goalOf(mode);var gi=$('goal');gi.max=m.rounds;if(document.activeElement!==gi)gi.value=goals[mode]===''?'':R;gi.placeholder=m.rounds;$('goalHint').textContent='0〜'+m.rounds+'。空欄なら最終ラウンドまで表示します。'}
+    if(o.spd<=0){table.innerHTML='<tr><td>速度を入力してください。</td></tr>';track.innerHTML='';$('tlLeft').textContent='';$('tlRight').textContent='';return}
+
+    var total, segs=[];
+    if(mode==='as'){
+      total=m.total;
+      html='<tr><th>行動回数</th><th>経過行動値</th><th>残り行動値</th></tr>';
+      var shown=0;
+      for(var n=1;n<=60;n++){
+        var t=timeOf(o,n), rem=total-t;
+        if(rem<0)break;
+        html+='<tr><td>'+n+'回目</td><td>'+fmt(t,1)+'</td><td class="big">'+fmt(Math.floor(rem*10+EPS)/10,1)+'</td></tr>';
+        shown++;
+      }
+      for(var k=0;k<4;k++)segs.push({a:k*500,b:(k+1)*500,label:String(total-k*500)});
+      $('tlLeft').textContent='残り2000から0まで。縦線が1回の行動です。';
+      $('tlRight').textContent='行動値0までに '+count(o,o.spd,total)+' 回行動';
+    }else{
+      total=m.first+100*R;
+      html='<tr><th>ラウンド</th><th>終了時の行動値</th><th>累計行動回数</th><th>次目標速度</th></tr>';
+      var prev=0;
+      for(var r=0;r<=R;r++){
+        var T=m.first+100*r, c=count(o,o.spd,T), g=c-prev, ns=nextSpeed(o,T,c);
+        html+='<tr><td>'+r+'</td><td>'+T+'</td><td class="big">'+c+'<span class="plus">回</span></td>'+
+          '<td><span class="need">'+fmt(ns,1)+'</span><span class="plus">+'+fmt(Math.max(0,ns-o.spd),1)+'</span></td></tr>';
+        segs.push({a:r?T-100:0,b:T,label:String(r)});
+        prev=c;
+      }
+      $('tlLeft').textContent='数字はラウンド。縦線が1回の行動です。';
+      $('tlRight').textContent='ラウンド'+R+'終了までに '+prev+' 回行動';
+    }
+    table.innerHTML=html;
+    var t2='';
+    segs.forEach(function(s){t2+='<div class="seg" style="left:'+(s.a/total*100)+'%;width:'+((s.b-s.a)/total*100)+'%">'+s.label+'</div>'});
+    t2+='<div class="railline"></div>';
+    var maxN=count(o,o.spd,total);
+    for(var i=1;i<=Math.min(maxN,200);i++){
+      var tt=timeOf(o,i);
+      t2+='<div class="tick'+(tt===0?' zero':'')+'" style="left:'+Math.max(0.3,Math.min(99.7,tt/total*100))+'%" title="'+i+'回目：行動値'+fmt(tt,1)+'"></div>';
+    }
+    track.innerHTML=t2;
+  }
+
+  function save(){
+    try{
+      var d={};ids.forEach(function(id){var e=$(id);d[id]=e.type==='checkbox'?e.checked:e.value});
+      d.goals=goals;d.sel=$('preset').value;d.pname=$('pname').value;
+      localStorage.setItem('hsr-action-calc',JSON.stringify(d));
+    }catch(e){}
+  }
+  function load(){
+    try{
+      var d=JSON.parse(localStorage.getItem('hsr-action-calc')||'null');
+      if(!d)return;
+      lastSel=d.sel||'';if(d.pname)$('pname').value=d.pname;
+      if(d.goals){['moc','aa'].forEach(function(k){if(d.goals[k]!=null)goals[k]=String(d.goals[k])})}
+      ids.forEach(function(id){if(!(id in d))return;var e=$(id);if(e.type==='checkbox')e.checked=!!d[id];else e.value=d[id]});
+    }catch(e){}
+  }
+  var CKEY='hsr-action-calc-chars', chars={}, delArmed=false;
+  function loadChars(){try{var c=JSON.parse(localStorage.getItem(CKEY)||'null');if(c&&typeof c==='object')chars=c}catch(e){}}
+  function saveChars(){try{localStorage.setItem(CKEY,JSON.stringify(chars));return true}catch(e){return false}}
+  function msg(t){$('pmsg').textContent=t}
+  function disarm(){delArmed=false;$('pdel').textContent='削除'}
+  function fillPresets(sel){
+    var p=$('preset');p.innerHTML='';
+    var names=Object.keys(chars).sort(function(a,b){return a.localeCompare(b,'ja')});
+    var o0=document.createElement('option');o0.value='';o0.textContent=names.length?'キャラを選ぶ（'+names.length+'件）':'保存したキャラはまだありません';p.appendChild(o0);
+    names.forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=n+'（速度'+chars[n].spd+'）';p.appendChild(o)});
+    p.value=(sel&&chars[sel])?sel:'';
+    $('pdel').disabled=!p.value;
+  }
+  function applyChar(n){
+    var c=chars[n];if(!c)return;
+    ids.forEach(function(id){if(!(id in c))return;var e=$(id);if(e.type==='checkbox')e.checked=!!c[id];else e.value=c[id]});
+    $('pname').value=n;
+  }
+  $('preset').addEventListener('change',function(){
+    disarm();var n=$('preset').value;$('pdel').disabled=!n;
+    if(n){applyChar(n);msg('「'+n+'」を読み込みました。');}
+    render();save();
+  });
+  $('psave').addEventListener('click',function(){
+    disarm();
+    var n=$('pname').value.trim();
+    if(!n){msg('保存する名前を入力してください。');$('pname').focus();return}
+    var existed=!!chars[n], c={};
+    ids.forEach(function(id){var e=$(id);c[id]=e.type==='checkbox'?e.checked:e.value});
+    chars[n]=c;
+    var ok=saveChars();
+    fillPresets(n);save();
+    msg(ok?('「'+n+'」を'+(existed?'上書き保存':'保存')+'しました。'):'このブラウザでは保存できませんでした。ページを閉じると消えます。');
+  });
+  $('pdel').addEventListener('click',function(){
+    var n=$('preset').value;if(!n)return;
+    if(!delArmed){delArmed=true;$('pdel').textContent='本当に削除';msg('「'+n+'」を削除します。もう一度押すと削除されます。');return}
+    delete chars[n];saveChars();disarm();fillPresets('');$('pname').value='';save();
+    msg('「'+n+'」を削除しました。');
+  });
+  var SA=!!window.STANDALONE;
+  function xmsg(t){$('xmsg').textContent=t}
+  function enc(o){return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+  function dec(t){
+    t=t.trim();var i=t.indexOf('#d=');if(i>=0)t=t.slice(i+3);
+    t=t.replace(/\s+/g,'').replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';
+    var o=JSON.parse(decodeURIComponent(escape(atob(t))));
+    if(!o||typeof o!=='object'||Array.isArray(o))throw new Error('bad');
+    var out={},n=0;
+    Object.keys(o).forEach(function(name){
+      var c=o[name];if(!c||typeof c!=='object'||n>=200)return;
+      var k=String(name).slice(0,30).trim();if(!k)return;
+      var r={};ids.forEach(function(id){if(id in c)r[id]=(id==='von')?!!c[id]:String(c[id]).slice(0,12)});
+      out[k]=r;n++;
+    });
+    return out;
+  }
+  $('xmake').addEventListener('click',function(){
+    var n=Object.keys(chars).length;
+    if(!n){xmsg('保存したキャラがまだありません。先にキャラを保存してください。');return}
+    var code=enc(chars), text=SA?(location.origin+location.pathname+'#d='+code):code, out=$('xout');
+    out.hidden=false;out.value=text;
+    var what=SA?'共有リンク':'共有コード';
+    var done=function(){xmsg(n+'件分の'+what+'をコピーしました。'+(SA?'別の端末でこのリンクを開いてください。':'別の端末のこの欄に貼り付けて読み込んでください。'))};
+    var fail=function(){out.focus();out.select();xmsg('自動でコピーできませんでした。上の欄の文字をすべてコピーしてください。')};
+    try{navigator.clipboard.writeText(text).then(done,fail)}catch(e){fail()}
+  });
+  $('xload').addEventListener('click',function(){
+    var t=$('xin').value;
+    if(!t.trim()){xmsg('共有コードを貼り付けてから押してください。');return}
+    var inc;
+    try{inc=dec(t)}catch(e){xmsg('共有コードを読み取れませんでした。コード全体をコピーできているか確認してください。');return}
+    var names=Object.keys(inc), over=0;
+    if(!names.length){xmsg('共有コードにキャラが入っていませんでした。');return}
+    names.forEach(function(k){if(chars[k])over++;chars[k]=inc[k]});
+    var ok=saveChars();fillPresets($('preset').value);$('xin').value='';
+    xmsg(names.length+'件を読み込みました'+(over?'（うち'+over+'件は同じ名前を上書き）':'')+'。'+(ok?'':'このブラウザでは保存できないため、ページを閉じると消えます。'));
+  });
+  function setMode(mo,fromHash){
+    if(!MODES[mo])return;
+    mode=mo;
+    if(!fromHash){try{history.replaceState(null,'','#'+mo)}catch(e){}}
+    render();
+  }
+
+  loadChars();
+  var lastSel='';
+  load();
+  fillPresets(lastSel);
+  if((location.hash||'').indexOf('#d=')===0){
+    $('xin').value=location.hash;$('xfer').open=true;
+    xmsg('共有リンクを受け取りました。「読み込む」を押すと取り込みます。同じ名前のキャラは上書きされます。');
+    try{history.replaceState(null,'',location.pathname)}catch(e){}
+  }
+  var h=(location.hash||'').slice(1);
+  if(MODES[h])mode=h;
+  $('form').addEventListener('input',function(e){if(e.target.id==='preset')return;render();save()});
+  $('goal').addEventListener('input',function(){goals[mode]=$('goal').value.trim();render();save()});
+  $('goal').addEventListener('blur',render);
+  $('form').addEventListener('submit',function(e){e.preventDefault()});
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button'),function(b){
+    b.addEventListener('click',function(){setMode(b.dataset.mode)});
+  });
+  window.addEventListener('hashchange',function(){setMode((location.hash||'').slice(1),true)});
+  render();
+})();
+</script>
+
+</body>
+</html>
